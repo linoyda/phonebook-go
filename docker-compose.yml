@@ -6,6 +6,7 @@ services:
     depends_on:
       - mongo
     environment:
+      - PORT=8080
       - MONGO_URI=mongodb://mongo:27017
       - DATABASE_NAME=phonebook
 

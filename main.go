@@ -1,12 +1,21 @@
 package main
 
 import (
+    "log"
+    "os"
+	
     "github.com/gin-gonic/gin"
+	
     "phonebook/config"
     "phonebook/handlers"
 )
 
 func main() {
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+	
     r := gin.Default()
 	
     // Trust localhost proxy requests only
@@ -21,5 +30,8 @@ func main() {
     r.PUT("/contacts/:id", handlers.EditContact)
     r.DELETE("/contacts/:id", handlers.DeleteContact)
 
-    r.Run()
+    err := r.Run(":" + port)
+    if err != nil {
+    	log.Fatal("FATAL: Failed to start server with error: ", err)
+    }
 }

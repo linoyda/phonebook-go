@@ -1,7 +1,7 @@
 package config
 
 import (
-	"context"
+    "context"
     "log"
     "os"
 
@@ -27,7 +27,7 @@ func ConnectDatabase() {
 
     err = client.Ping(context.Background(), nil)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("FATAL: Cannot ping MongoDB with error: ", err)
     }
 
     DB = client.Database(databaseName)
