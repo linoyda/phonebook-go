@@ -8,6 +8,10 @@ import (
 
 func main() {
     r := gin.Default()
+	
+    // Trust localhost proxy requests only
+    r.ForwardedByClientIP = true
+    r.SetTrustedProxies([]string{"127.0.0.1"})
 
     config.ConnectDatabase()
 
