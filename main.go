@@ -11,6 +11,8 @@ import (
 )
 
 func main() {
+    config.ConnectDatabase()
+	
     port := os.Getenv("PORT")
     if port == "" {
         port = "8080"
@@ -21,8 +23,6 @@ func main() {
     // Trust localhost proxy requests only
     r.ForwardedByClientIP = true
     r.SetTrustedProxies([]string{"127.0.0.1"})
-
-    config.ConnectDatabase()
 
     r.GET("/contacts", handlers.GetContacts)
     r.GET("/contacts/search", handlers.SearchContacts)
