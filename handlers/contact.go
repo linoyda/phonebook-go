@@ -4,6 +4,7 @@ import (
     "context"
 	"log"
     "strconv"
+	"encoding/json"
     "time"
     "net/http"
 	
@@ -20,25 +21,26 @@ import (
 func GetContacts(c *gin.Context) {
     var contacts []models.Contact
 
-    // Parse and validate query parameters
+    // Parse and validate query parameters. Limit is the max amount of users to retrieve.
+	// totalPages is the amount of pages to display in total. 
+	// If contacts / totalPage < 1, we'll show exactly one user per page (less than the totalPages required)
     limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
-    if err != nil || limit <= 0 {
+    if err != nil || limit < 1 || limit > 10{
         c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid limit parameter"})
         return
     }
-    page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-    if err != nil || page <= 0 {
-        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid page parameter"})
+    totalPages, err := strconv.Atoi(c.DefaultQuery("pages", "1"))
+    if err != nil || totalPages < 1 {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid pages parameter"})
         return
     }
 	
-    offset := (page - 1) * limit
-    collection := config.DB.Collection("contacts")
+	collection := config.DB.Collection("contacts")
     ctx, cancel := context.WithTimeout(c, 10*time.Second)
     defer cancel()
 
-    // Set up options for pagination
-    opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(offset))
+	// Fetch all contacts with the given limit
+    opts := options.Find().SetLimit(int64(limit))
     cursor, err := collection.Find(ctx, bson.M{}, opts)
     if err != nil {
         log.Println("Error fetching contacts:", err)
@@ -47,7 +49,7 @@ func GetContacts(c *gin.Context) {
     }
     defer cursor.Close(ctx)
 
-    // Iterate through the cursor and decode contacts
+    // Iterate through the cursor and decode contacts into the struct type.
     for cursor.Next(ctx) {
         var contact models.Contact
         if err := cursor.Decode(&contact); err != nil {
@@ -64,9 +66,45 @@ func GetContacts(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"message": "Cursor error"})
         return
     }
+	
+	// Calculate the number of contacts per page if the contacts fetched are larger than 0.
+    totalContacts := len(contacts)
+    if totalContacts <= 0 {
+        c.JSON(http.StatusOK, gin.H{"data": []models.Contact{}})
+        return
+    }
 
-    // Respond with the list of contacts
-    c.JSON(http.StatusOK, gin.H{"message": "Contacts fetched successfully", "data": contacts})
+    contactsPerPage := (totalContacts + totalPages - 1) / totalPages
+
+    // Split contacts into pages
+    pages := make([]map[string]interface{}, 0, totalPages)
+    for i := 0; i < totalContacts; i += contactsPerPage {
+        end := i + contactsPerPage
+        if end > totalContacts {
+            end = totalContacts
+        }
+        page := map[string]interface{}{
+            "pageIndex": i / contactsPerPage + 1,
+            "contacts":  contacts[i:end],
+        }
+        pages = append(pages, page)
+    }
+
+    response := gin.H{
+        "pages":      pages,
+        "totalPages": len(pages),
+    }
+
+    // Marshal the response to pretty JSON and write the response
+    jsonResponse, err := json.MarshalIndent(response, "", "    ")
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to format JSON response"})
+        return
+    }
+
+    c.Writer.Header().Set("Content-Type", "application/json")
+    c.Writer.WriteHeader(http.StatusOK)
+    c.Writer.Write(jsonResponse)
 }
 
 // Todo
