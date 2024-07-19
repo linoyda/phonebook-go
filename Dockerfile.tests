@@ -1,0 +1,13 @@
+FROM golang:1.18
+
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Install dependencies and build
+RUN go mod download
+RUN go build -o phonebook
+
+# Set the entry point for running tests
+CMD ["go", "test", "./tests"]

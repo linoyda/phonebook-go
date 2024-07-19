@@ -224,7 +224,29 @@ func EditContact(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "Contact updated successfully"})
 }
 
-// Todo
+// Handles DELETE requests for removing an existing contact by ID.
 func DeleteContact(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{"message": "DeleteContact - TBD"})
+    id, err := primitive.ObjectIDFromHex(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid ID format"})
+        return
+    }
+
+    collection := config.DB.Collection("contacts")
+    ctx, cancel := context.WithTimeout(c, 10*time.Second)
+    defer cancel()
+
+    result, err := collection.DeleteOne(ctx, bson.M{"_id": id})
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete contact"})
+        return
+    }
+
+    if result.DeletedCount == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"message": "Contact not found"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Contact deleted successfully"})
 }
+

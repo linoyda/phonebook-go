@@ -1,6 +1,8 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     depends_on:
@@ -9,6 +11,8 @@ services:
       - PORT=8080
       - MONGO_URI=mongodb://mongo:27017
       - DATABASE_NAME=phonebook
+    networks:
+      - my-network
 
   mongo:
     image: mongo:latest
@@ -16,6 +20,23 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    networks:
+      - my-network
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.tests
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+      - DATABASE_NAME=test_db_phonebook
+    networks:
+      - my-network
 
 volumes:
   mongo-data:
+
+networks:
+  my-network:
