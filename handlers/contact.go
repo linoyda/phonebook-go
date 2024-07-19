@@ -2,7 +2,6 @@ package handlers
 
 import (
     "context"
-	"log"
     "strconv"
 	"encoding/json"
     "time"
@@ -25,7 +24,7 @@ func GetContacts(c *gin.Context) {
 	// totalPages is the amount of pages to display in total. 
 	// If contacts / totalPage < 1, we'll show exactly one user per page (less than the totalPages required)
     limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
-    if err != nil || limit < 1 || limit > 10{
+    if err != nil || limit < 1 || limit > 10 {
         c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid limit parameter"})
         return
     }
@@ -43,7 +42,6 @@ func GetContacts(c *gin.Context) {
     opts := options.Find().SetLimit(int64(limit))
     cursor, err := collection.Find(ctx, bson.M{}, opts)
     if err != nil {
-        log.Println("Error fetching contacts:", err)
         c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch contacts"})
         return
     }
@@ -53,7 +51,6 @@ func GetContacts(c *gin.Context) {
     for cursor.Next(ctx) {
         var contact models.Contact
         if err := cursor.Decode(&contact); err != nil {
-            log.Println("Error decoding contact:", err)
             c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to decode contact"})
             return
         }
@@ -62,7 +59,6 @@ func GetContacts(c *gin.Context) {
 
     // Check for cursor errors
     if err := cursor.Err(); err != nil {
-        log.Println("Cursor error:", err)
         c.JSON(http.StatusInternalServerError, gin.H{"message": "Cursor error"})
         return
     }
@@ -107,9 +103,60 @@ func GetContacts(c *gin.Context) {
     c.Writer.Write(jsonResponse)
 }
 
-// Todo
+// Handles GET requests for searching a query with a limit parameter. Query is done through a regex, so exact match isn't needed. 
 func SearchContacts(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{"message": "SearchContacts - TBD"})
+    var contacts []models.Contact
+    query := c.Query("q")
+    limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
+    if err != nil || limit < 1 || limit > 10  {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid limit parameter"})
+        return
+    }
+
+    collection := config.DB.Collection("contacts")
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    filter := bson.M{
+        "$or": []bson.M{
+            {"first_name": bson.M{"$regex": query, "$options": "i"}},
+            {"last_name": bson.M{"$regex": query, "$options": "i"}},
+            {"phone": bson.M{"$regex": query, "$options": "i"}},
+            {"address": bson.M{"$regex": query, "$options": "i"}},
+        },
+    }
+
+    opts := options.Find().SetLimit(int64(limit))
+    cursor, err := collection.Find(ctx, filter, opts)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search contacts"})
+        return
+    }
+    defer cursor.Close(ctx)
+
+    for cursor.Next(ctx) {
+        var contact models.Contact
+        if err := cursor.Decode(&contact); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode contact"})
+            return
+        }
+        contacts = append(contacts, contact)
+    }
+
+    // Pretty print contacts if not empty.
+	totalContacts := len(contacts)
+    if totalContacts <= 0 {
+        c.JSON(http.StatusOK, gin.H{"message": "No contacts found matching the query"})
+        return
+    }
+	
+    responseData, err := json.MarshalIndent(contacts, "", "  ")
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to format contacts"})
+        return
+    }
+
+    c.Data(http.StatusOK, "application/json", responseData)
 }
 
 // Handles a POST request for adding a new contact.
@@ -132,18 +179,49 @@ func AddContact(c *gin.Context) {
     // Add the new contact
     _, err := collection.InsertOne(ctx, contact)
     if err != nil {
-        log.Println("Error adding contact:", err)
         c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to add contact"})
         return
     }
 
-    // Respond with success and the added contact
     c.JSON(http.StatusCreated, gin.H{"message": "Contact added successfully", "data": contact})
 }
 
-// Todo
+// Handles PUT requests for updatng an existing contact. If the contact doesn't exist, let the client know nothing was changed.
 func EditContact(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{"message": "EditContact - TBD"})
+    // Parse and validate the contact ID from the URL parameter
+    id, err := primitive.ObjectIDFromHex(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid ID format"})
+        return
+    }
+
+    var contact models.Contact
+
+    // Bind the request payload to a Contact struct
+    if err := c.ShouldBindJSON(&contact); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+        return
+    }
+
+    collection := config.DB.Collection("contacts")
+    ctx, cancel := context.WithTimeout(c, 10*time.Second)
+    defer cancel()
+
+    filter := bson.M{"_id": id}
+    update := bson.M{"$set": contact}
+    result, err := collection.UpdateOne(ctx, filter, update)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update contact"})
+        return
+    }
+
+    // Check if any document was updated
+    if result.ModifiedCount == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"message": "Contact not found"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Contact updated successfully"})
 }
 
 // Todo

@@ -51,7 +51,26 @@ func setupIndices() {
 
     _, err := collection.Indexes().CreateOne(context.Background(), indexModel)
     if err != nil {
-        log.Fatal("FATAL: Failed to create indices ", err)
+        log.Fatal("FATAL: Failed to create name indices ", err)
+    }
+	
+	// Indexes for individual fields
+    indexModelPhone := mongo.IndexModel{
+        Keys: bson.D{{Key: "phone", Value: 1}},
+        Options: options.Index().SetUnique(false),
+    }
+    _, err = collection.Indexes().CreateOne(context.Background(), indexModelPhone)
+    if err != nil {
+        log.Fatal("FATAL: Failed to create phone index ", err)
+    }
+
+    indexModelAddress := mongo.IndexModel{
+        Keys: bson.D{{Key: "address", Value: 1}},
+        Options: options.Index().SetUnique(false),
+    }
+    _, err = collection.Indexes().CreateOne(context.Background(), indexModelAddress)
+    if err != nil {
+        log.Fatal("FATAL: Failed to create address index ", err)
     }
 
     log.Println("Indices created successfully")
