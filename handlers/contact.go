@@ -3,8 +3,9 @@ package handlers
 import (
     "context"
     "strconv"
-	"encoding/json"
+    "encoding/json"
     "time"
+    "errors"
     "net/http"
 	
     "phonebook/config"
@@ -21,8 +22,8 @@ func GetContacts(c *gin.Context) {
     var contacts []models.Contact
 
     // Parse and validate query parameters. Limit is the max amount of users to retrieve.
-	// totalPages is the amount of pages to display in total. 
-	// If contacts / totalPage < 1, we'll show exactly one user per page (less than the totalPages required)
+    // totalPages is the amount of pages to display in total. 
+    // If contacts / totalPage < 1, we'll show exactly one user per page (less than the totalPages required)
     limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
     if err != nil || limit < 1 || limit > 10 {
         c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid limit parameter"})
@@ -34,11 +35,11 @@ func GetContacts(c *gin.Context) {
         return
     }
 	
-	collection := config.DB.Collection("contacts")
+    collection := config.DB.Collection("contacts")
     ctx, cancel := context.WithTimeout(c, 10*time.Second)
     defer cancel()
-
-	// Fetch all contacts with the given limit
+    
+    // Fetch all contacts with the given limit
     opts := options.Find().SetLimit(int64(limit))
     cursor, err := collection.Find(ctx, bson.M{}, opts)
     if err != nil {
@@ -63,7 +64,7 @@ func GetContacts(c *gin.Context) {
         return
     }
 	
-	// Calculate the number of contacts per page if the contacts fetched are larger than 0.
+    // Calculate the number of contacts per page if the contacts fetched are larger than 0.
     totalContacts := len(contacts)
     if totalContacts <= 0 {
         c.JSON(http.StatusOK, gin.H{"data": []models.Contact{}})
@@ -144,7 +145,7 @@ func SearchContacts(c *gin.Context) {
     }
 
     // Pretty print contacts if not empty.
-	totalContacts := len(contacts)
+    totalContacts := len(contacts)
     if totalContacts <= 0 {
         c.JSON(http.StatusOK, gin.H{"message": "No contacts found matching the query"})
         return
@@ -159,6 +160,13 @@ func SearchContacts(c *gin.Context) {
     c.Data(http.StatusOK, "application/json", responseData)
 }
 
+func validateContact(contact models.Contact) error {
+    if contact.FirstName == "" || contact.LastName == "" || contact.Phone == "" || contact.Address == "" {
+        return errors.New("All contact fields are required")
+    }
+    return nil
+}
+
 // Handles a POST request for adding a new contact.
 func AddContact(c *gin.Context) {
     var contact models.Contact
@@ -166,6 +174,10 @@ func AddContact(c *gin.Context) {
     // Bind the request payload to a Contact struct
     if err := c.ShouldBindJSON(&contact); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+        return
+    }
+    if err := validateContact(contact); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
         return
     }
 
@@ -200,6 +212,10 @@ func EditContact(c *gin.Context) {
     // Bind the request payload to a Contact struct
     if err := c.ShouldBindJSON(&contact); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+        return
+    }
+    if err := validateContact(contact); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
         return
     }
 
